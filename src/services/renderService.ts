@@ -7,6 +7,7 @@ import {buildJournalScene,capacityIssue} from './journalSceneService';
 import {sceneArtwork,tapeArtwork,svgUrl} from './sceneArtwork';
 import {imageGeometry} from './photoGeometry';
 import {wrapText} from '../utils/textLayout';
+import {stickerSvg} from '../assets/journal/stickers';
 export {wrapText} from '../utils/textLayout';
 async function loadImage(url:string){const img=new Image();img.src=url;await img.decode();return img;}
 export function drawImageCover(ctx:CanvasRenderingContext2D,image:HTMLImageElement,x:number,y:number,width:number,height:number){const g=imageGeometry(image.naturalWidth,image.naturalHeight,width,height,'cover');ctx.save();ctx.beginPath();ctx.rect(x,y,width,height);ctx.clip();ctx.drawImage(image,x+g.x,y+g.y,g.width,g.height);ctx.restore();}
@@ -21,6 +22,8 @@ export async function renderJournal({photos,template,content,overrides={},story,
  ctx.fillStyle=scene.background;ctx.fillRect(0,0,1080,1440);
  ctx.drawImage(await loadImage(scene.paperUrl),0,0,1080,1440);
  ctx.drawImage(await loadImage(svgUrl(sceneArtwork(scene))),0,0,1080,1440);
+ const drawSticker=async(s:typeof scene.stickers[number])=>{ctx.save();ctx.translate(s.x+s.width/2,s.y+s.height/2);ctx.rotate(s.rotation*Math.PI/180);ctx.drawImage(await loadImage(svgUrl(stickerSvg(s.stickerId,template.id==='urban_grunge'?'#40362d':template.id==='soft_scrapbook'?'#6f8d82':'#a85f38'))),-s.width/2,-s.height/2,s.width,s.height);ctx.restore();};
+ for(const s of scene.stickers.filter(s=>s.zIndex<40).sort((a,b)=>a.zIndex-b.zIndex))await drawSticker(s);
  for(const p of scene.photos){
   const url=URL.createObjectURL(p.photo.file);
   try{
@@ -35,6 +38,7 @@ export async function renderJournal({photos,template,content,overrides={},story,
    ctx.drawImage(await loadImage(svgUrl(tapeArtwork(p))),-w/2,-h/2,w,h);ctx.restore();
   }finally{URL.revokeObjectURL(url);}
  }
+ for(const s of scene.stickers.filter(s=>s.zIndex>=40).sort((a,b)=>a.zIndex-b.zIndex))await drawSticker(s);
  for(const t of scene.texts){
   if(!t.text)continue;ctx.save();ctx.font=t.fontWeight+' '+t.fontSize+'px '+t.fontFamily;ctx.fillStyle=t.color;ctx.textAlign=t.align;ctx.textBaseline='top';
   const lines=wrapText(s=>ctx.measureText(s).width,t.text,t.width,t.maxLines);

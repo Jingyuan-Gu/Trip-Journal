@@ -166,7 +166,7 @@
   .secondary-button:disabled { color: #77736b; background: #f2f1eb; }
   .selected-bar { padding: 23px; margin-top: 25px; border: 1px solid #e2ded3; background: #fffdf7; border-radius: 8px; }
   .selected-bar > div { display: flex; gap: 15px; align-items: center; min-height: 80px; color: #77736b; font-size: 14px; line-height: 1.8; }
-  .template-layout { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); gap: 30px; }
+  .template-layout { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); gap: 30px; margin-top: 36px; }
   .template-choices { display: flex; flex-direction: column; gap: 10px; margin: 18px 0 27px; }
   .template-choice { display: flex; gap: 12px; align-items: center; padding: 12px; text-align: left; border: 1px solid #e2ded5; border-radius: 7px; }
   .template-choice.chosen { border-color: #7c9277; background: #f1f4ea; }

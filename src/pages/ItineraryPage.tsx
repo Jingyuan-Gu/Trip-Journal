@@ -30,7 +30,7 @@ export default function ItineraryPage() {
   });
   const analyze = async () => {
     if(busy)return;if(day&&!window.confirm('重新分析会替换当前站点和手动修正，确定继续吗？'))return;const task=new AbortController();controller.current=task;setBusy(true);setError('');
-    try{const result=await analyzeDayTrip(photos,date,setProgress,task.signal);if(!task.signal.aborted)setState(p=>({...p,dayItineraries:{...p.dayItineraries,[date]:result}}));}
+    try{const result=await analyzeDayTrip(photos,date,setProgress,task.signal,day);if(!task.signal.aborted)setState(p=>({...p,dayItineraries:{...p.dayItineraries,[date]:result}}));}
     catch(e){if(!task.signal.aborted)setError(e instanceof Error?e.message:'分析失败，请重试');}
     finally{if(!task.signal.aborted)setBusy(false);}
   };
@@ -45,7 +45,7 @@ export default function ItineraryPage() {
     setState(p=>({...p,dayItineraries:{...p.dayItineraries,[date]:{...p.dayItineraries[date],stops:p.dayItineraries[date].stops.filter(s=>s.id!==id)}}}));setConfirmation(null);
   };
   const createStop=()=>{if(!date||!newPlace.trim())return;const created=newStop(newPlace,newTime);setState(p=>({...p,dayItineraries:{...p.dayItineraries,[date]:{...p.dayItineraries[date],stops:[...p.dayItineraries[date].stops,created].sort((a,b)=>(a.startTime||'99:99').localeCompare(b.startTime||'99:99'))}}}));setNewPlace('');setNewTime('');setAddingStop(false);};
-  return <PageFrame title="今日行程" description={`${date} · ${photos.length} 张照片`} back="/dates" placeholder={false} compact>
+  return <PageFrame title="今日行程" description="把今天走过的地方整理成一条旅行路线，再确认每一站的照片与文字。" meta={`${date} · ${photos.length} 张照片`} back="/dates" placeholder={false}>
     <div className="itinerary-confirmation-page">
       <section className="itinerary-intro">
         <div><h2>把今天走过的地方整理成一条旅行路线。</h2>{!day&&<p>我们会根据照片时间和地点信息，自动整理可能的行程站点。</p>}</div>

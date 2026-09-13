@@ -1,7 +1,7 @@
 import type { PhotoLocation } from './photo';
 export interface PhotoCluster {
   id: string; startTime: number | null; endTime: number | null;
-  photoIds: string[]; representativePhotoIds: string[]; centerLocation?: PhotoLocation;
+  photoIds: string[]; representativePhotoIds: string[]; centerLocation?: PhotoLocation; confidence?: number; boundaryReasons?: string[];
 }
 export interface TripStop {
   similarityGroups?: SimilarityGroup[];
