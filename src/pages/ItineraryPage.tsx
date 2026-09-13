@@ -9,6 +9,7 @@ import { photoSignature, recommendPhotos } from '../services/tripAnalysisService
 import { presentStop } from '../utils/itineraryPresentation';
 import type { TripStop } from '../types/story';
 import { newStop } from '../services/itineraryEditingService';
+import { Plus } from 'lucide-react';
 import '../itinerary.css';
 
 export default function ItineraryPage() {
@@ -54,7 +55,7 @@ export default function ItineraryPage() {
         {day&&day.photoSignature!==photoSignature(photos)&&<p>照片已变化，当前保留的是上次行程。你可以重新分析。</p>}
       </section>
       {day&&<><div className="itinerary-timeline">{day.stops.map((stop,index)=><ItineraryStopCard key={stop.id} stop={stop} index={index} photos={photos} disabled={busy} onUpdate={patch=>updateStop(stop.id,patch)} onRemove={()=>setConfirmation({kind:'remove',id:stop.id})} onPhotoChange={ids=>updateStop(stop.id,{representativePhotoIds:ids})}/>)}</div>
-      <div className="add-stop-area">{addingStop?<div className="add-stop-form"><label>时间<input type="time" value={newTime} onChange={e=>setNewTime(e.target.value)}/></label><label>地点<input autoFocus placeholder="例如：博物馆" value={newPlace} onChange={e=>setNewPlace(e.target.value)}/></label><button className="primary-button" onClick={createStop}>添加这一站</button><button className="secondary-button" onClick={()=>setAddingStop(false)}>取消</button></div>:<button className="secondary-button" onClick={()=>setAddingStop(true)}>＋ 新增一站</button>}</div>
+      <div className="add-stop-area">{addingStop?<div className="add-stop-form"><label className="new-stop-time">时间<input type="time" value={newTime} onChange={e=>setNewTime(e.target.value)}/></label><label className="new-stop-place">地点<input autoFocus placeholder="输入景点、餐厅或区域名称" value={newPlace} onChange={e=>setNewPlace(e.target.value)}/></label><div className="add-stop-actions"><button className="primary-button" onClick={createStop}>添加这一站</button><button className="secondary-button" onClick={()=>setAddingStop(false)}>取消</button></div></div>:<button className="add-stop-trigger" onClick={()=>setAddingStop(true)}><Plus size={16}/>新增一站</button>}</div>
       {!day.stops.length&&<p className="paper-panel">当前没有行程片段。你可以新增一站，或重新分析。</p>}
       <footer className="itinerary-next"><button type="button" className="primary-button" disabled={busy||ids.length<2} onClick={()=>unknownCount?setConfirmation({kind:'generate'}):generate()}>选择手账风格</button></footer></>}
     </div>
