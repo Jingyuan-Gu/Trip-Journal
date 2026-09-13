@@ -18,7 +18,8 @@ export default async function handler(req,res){
     res.setHeader('Cache-Control','no-store');
     return res.status(200).json(result);
   }catch(error){
-    console.error('[generate-stop-caption]',error instanceof Error?error.name:'Error',error instanceof Error?error.message:'Unknown error');
-    return res.status(502).json({error:'这次没写出来，再试一次吧。'});
+    const code=error instanceof Error&&/^[A-Z_0-9]+$/.test(error.message)?error.message:'AGNES_NETWORK_ERROR';
+    console.error('[generate-stop-caption]',error instanceof Error?error.name:'Error',code);
+    return res.status(502).json({error:'这次没写出来，再试一次吧。',code});
   }
 }
