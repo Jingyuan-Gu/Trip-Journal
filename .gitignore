@@ -1,0 +1,11 @@
+node_modules/
+dist/
+*.tsbuildinfo
+.sites-runtime/
+.qa/
+.env
+.env.*
+!.env.example
+*.log
+caption-test.png
+cd
