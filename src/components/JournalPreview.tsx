@@ -9,6 +9,7 @@ import { buildJournalScene,clamp,ensureDecorationInsideCanvas } from '../service
 import { sceneArtwork,tapeArtwork,svgUrl } from '../services/sceneArtwork';
 import { stickerSvg } from '../assets/journal/stickers';
 import { imageGeometry } from '../services/photoGeometry';
+import { measureTextBlock } from '../utils/textLayout';
 import '../story.css';
 
 interface Props {template:JournalTemplate;photos:Photo[];content:JournalContent;editable?:boolean;selectedTextId?:string|null;onSelectText?:(id:string)=>void;overrides?:Record<string,TextStyleOverride>;story?:DayItinerary;onTextChange?:(id:string,value:string)=>void;edits?:SceneEdits;onEdits?:(edits:SceneEdits)=>void}
@@ -22,7 +23,7 @@ export function JournalPreview({template,photos,content,editable=false,selectedT
   const photo=scene.photos.find(p=>p.photo.id===id),text=scene.texts.find(t=>t.id===id),sticker=scene.stickers.find(s=>s.id===id);
   const item=kind==='text'||kind==='textResize'?text:kind==='sticker'||kind==='stickerResize'?sticker:photo;if(!item)return;
   onSelectText?.(photo&&kind!=='text'&&kind!=='textResize'?'photo:'+id:(kind==='sticker'||kind==='stickerResize')?'sticker:'+id:id);
-  const height='height'in item?item.height:item.lineHeight*item.maxLines;
+  const height=item.height;
   const iw=photo?photo.width-photo.padding*2:0,ih=photo?photo.height-photo.padding-photo.bottom:0;
   const g=photo?imageGeometry(photo.photo.width,photo.photo.height,iw,ih,'cover'):null;
   drag.current={id,kind,startX:e.clientX,startY:e.clientY,base:edits,x:item.x,y:item.y,width:item.width,height,rotation:photo?.rotation??sticker?.rotation??0,cropX:photo?.cropX??.5,cropY:photo?.cropY??.5,overflowX:g?g.width-iw:0,overflowY:g?g.height-ih:0};
@@ -31,7 +32,14 @@ export function JournalPreview({template,photos,content,editable=false,selectedT
   const d=drag.current;if(!d||!onEdits)return;
   const dx=(e.clientX-d.startX)/scale,dy=(e.clientY-d.startY)/scale;
   const radians=d.rotation*Math.PI/180,lx=dx*Math.cos(radians)+dy*Math.sin(radians),ly=-dx*Math.sin(radians)+dy*Math.cos(radians);
-  if(d.kind==='text'||d.kind==='textResize'){const patch=d.kind==='text'?{x:clamp(d.x+dx,70,1010-d.width),y:clamp(d.y+dy,70,1350-d.height)}:{width:clamp(d.width+dx,100,1010-d.x)};onEdits({...d.base,texts:{...d.base.texts,[d.id]:{...d.base.texts[d.id],...patch}}});return;}
+  if(d.kind==='text'||d.kind==='textResize'){
+   const text=scene.texts.find(item=>item.id===d.id);
+   if(!text)return;
+   const patch=d.kind==='text'
+    ? {x:clamp(d.x+dx,0,1080-d.width),y:clamp(d.y+dy,0,1440-d.height)}
+    : (()=>{const width=clamp(d.width+lx,120,1080-d.x),height=measureTextBlock(text.text,width,text.fontFamily,text.fontSize,text.fontWeight,text.lineHeight,text.letterSpacing).height;return {width,y:clamp(d.y,0,Math.max(0,1440-height))};})();
+   onEdits({...d.base,texts:{...d.base.texts,[d.id]:{...d.base.texts[d.id],...patch}}});return;
+  }
   if(d.kind==='sticker'||d.kind==='stickerResize'){
    const maxFactor=Math.min(2,360/d.width,300/d.height),minFactor=Math.max(.5,32/d.width,32/d.height),factor=clamp(1+lx/d.width,minFactor,maxFactor);
    const geometry=d.kind==='sticker'?{x:d.x+dx,y:d.y+dy,width:d.width,height:d.height,rotation:d.rotation}:{x:d.x,y:d.y,width:d.width*factor,height:d.height*factor,rotation:d.rotation};
@@ -69,9 +77,9 @@ export function JournalPreview({template,photos,content,editable=false,selectedT
  {editable&&selected&&<button aria-label="拖动缩放图片" className="element-resize" onClick={e=>e.stopPropagation()} onPointerDown={e=>begin(e,id,'resize')}/>}
  </div>;})}
  {scene.stickers.map(sticker=>{const selected=selectedTextId==='sticker:'+sticker.id;return <div key={sticker.id} className={'scene-sticker '+(selected?'sticker-selected':'')} style={{position:'absolute',left:sticker.x,top:sticker.y,width:sticker.width,height:sticker.height,transform:`rotate(${sticker.rotation}deg)`,zIndex:sticker.zIndex,pointerEvents:editable&&!sticker.locked?'auto':'none',cursor:editable&&!sticker.locked?'grab':undefined}} onClick={e=>{if(editable&&!sticker.locked){e.stopPropagation();onSelectText?.('sticker:'+sticker.id);}}} onPointerDown={e=>{if(editable&&!sticker.locked)begin(e,sticker.id,'sticker')}} onPointerMove={move} onPointerUp={finish} onPointerCancel={finish} onLostPointerCapture={finish}><img src={svgUrl(stickerSvg(sticker.stickerId,template.id==='urban_grunge'?'#40362d':template.id==='soft_scrapbook'?'#6f8d82':'#a85f38'))} alt="" draggable={false} style={{display:'block',width:'100%',height:'100%'}}/>{editable&&selected&&!sticker.locked&&<button type="button" aria-label="删除贴纸" className="sticker-delete-control" onPointerDown={e=>e.stopPropagation()} onClick={e=>{e.stopPropagation();onEdits?.({...edits,stickers:{...(edits.stickers??{}),[sticker.id]:{...(edits.stickers??{})[sticker.id],hidden:true}}});onSelectText?.('');}}>×</button>}{editable&&selected&&!sticker.locked&&<button aria-label="调整贴纸大小" className="element-resize" onClick={e=>e.stopPropagation()} onPointerDown={e=>{e.stopPropagation();begin(e,sticker.id,'stickerResize')}} onPointerMove={move} onPointerUp={finish} onPointerCancel={finish}/>}</div>})}
- {scene.texts.map(t=>{const display=t.text,canEdit=editable&&t.id!=='city',hasText=Boolean(display.trim()),isEmptyEditor=canEdit&&!hasText;return <div key={t.id} className={'text-element '+(isEmptyEditor?'scene-empty-field':'')} style={{position:'absolute',left:t.x,top:t.y,width:t.width,height:t.lineHeight*t.maxLines,zIndex:4,transform:`rotate(${t.rotation}deg)`,transformOrigin:'center'}}>
+ {scene.texts.map(t=>{const display=t.text,canEdit=editable&&t.id!=='city',hasText=Boolean(display.trim()),isEmptyEditor=canEdit&&!hasText,selected=selectedTextId===t.id;return <div key={t.id} className={'text-element '+(isEmptyEditor?'scene-empty-field ':'')+(selected?'text-selected':'')} style={{position:'absolute',left:t.x,top:t.y,width:t.width,height:t.height,zIndex:4,transform:`rotate(${t.rotation}deg)`,transformOrigin:'center'}}>
  {canEdit&&selectedTextId===t.id&&<button className="text-move" aria-label={'移动'+t.label} onPointerDown={e=>begin(e,t.id,'text')} onPointerMove={move} onPointerUp={finish} onPointerCancel={finish} onClick={e=>e.stopPropagation()}>⠿</button>}
- {canEdit&&selectedTextId===t.id?<textarea autoFocus aria-label={t.label} className="scene-inline is-text-selected" style={{width:'100%',height:'100%',fontFamily:t.fontFamily,fontSize:t.fontSize,fontWeight:t.fontWeight,color:t.color,lineHeight:t.lineHeight+'px',letterSpacing:t.letterSpacing+'px',textAlign:t.align}} value={t.text} maxLength={t.maxLength} onClick={e=>e.stopPropagation()} onChange={e=>onTextChange?.(t.id,e.target.value)} onKeyDown={e=>{if(e.key==='Escape'||((e.ctrlKey||e.metaKey)&&e.key==='Enter')){e.currentTarget.blur();onSelectText?.('');}}}/>:<div role={canEdit?'button':undefined} tabIndex={canEdit?0:undefined} aria-label={t.label} className={'scene-text '+(isEmptyEditor?'scene-empty-text':'')} style={{width:'100%',height:'100%',fontFamily:t.fontFamily,fontSize:t.fontSize,fontWeight:t.fontWeight,color:t.color,lineHeight:t.lineHeight+'px',letterSpacing:t.letterSpacing+'px',textAlign:t.align,cursor:canEdit?'text':undefined}} onClick={e=>{if(canEdit){e.stopPropagation();onSelectText?.(t.id);}}} onKeyDown={e=>{if(canEdit&&e.key==='Enter')onSelectText?.(t.id);}}>{hasText?display:(isEmptyEditor&&selectedTextId===t.id?'添加'+t.label:'')}</div>}
+ {canEdit&&selected?<textarea autoFocus aria-label={t.label} className="scene-inline is-text-selected" style={{width:'100%',height:'100%',fontFamily:t.fontFamily,fontSize:t.fontSize,fontWeight:t.fontWeight,color:t.color,lineHeight:t.lineHeight+'px',letterSpacing:t.letterSpacing+'px',textAlign:t.align}} value={t.text} maxLength={t.maxLength} onClick={e=>e.stopPropagation()} onChange={e=>onTextChange?.(t.id,e.target.value)} onKeyDown={e=>{if(e.key==='Escape'||((e.ctrlKey||e.metaKey)&&e.key==='Enter')){e.currentTarget.blur();onSelectText?.('');}}}/>:<div role={canEdit?'button':undefined} tabIndex={canEdit?0:undefined} aria-label={t.label} className={'scene-text '+(isEmptyEditor?'scene-empty-text':'')} style={{width:'100%',height:'100%',fontFamily:t.fontFamily,fontSize:t.fontSize,fontWeight:t.fontWeight,color:t.color,lineHeight:t.lineHeight+'px',letterSpacing:t.letterSpacing+'px',textAlign:t.align,cursor:canEdit?'text':undefined}} onClick={e=>{if(canEdit){e.stopPropagation();onSelectText?.(t.id);}}} onKeyDown={e=>{if(canEdit&&e.key==='Enter')onSelectText?.(t.id);}}>{hasText?display:(isEmptyEditor&&selected?'添加'+t.label:'')}</div>}
  {canEdit&&selectedTextId===t.id&&<button className="element-resize" aria-label={'调整'+t.label+'宽度'} onPointerDown={e=>begin(e,t.id,'textResize')} onPointerMove={move} onPointerUp={finish} onPointerCancel={finish} onClick={e=>e.stopPropagation()}/>} 
  </div>})}
  </div></div></div>;

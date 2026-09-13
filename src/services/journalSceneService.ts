@@ -6,9 +6,9 @@ import type { TripState } from '../types/trip';
 import type { SceneEdits } from '../types/scene';
 import { emptySceneEdits } from '../types/scene';
 import { STICKER_LIBRARY, stickerSize } from '../assets/journal/stickers';
-import { normalizeJournalBodyText } from '../utils/textLayout';
+import { measureTextBlock, normalizeJournalBodyText } from '../utils/textLayout';
 
-export interface SceneText { id:string;label:string;text:string;x:number;y:number;width:number;fontSize:number;fontFamily:string;fontWeight:number|string;color:string;align:'left'|'center'|'right';lineHeight:number;letterSpacing:number;rotation:number;maxLines:number;maxLength:number }
+export interface SceneText { id:string;label:string;text:string;x:number;y:number;width:number;height:number;fontSize:number;fontFamily:string;fontWeight:number|string;color:string;align:'left'|'center'|'right';lineHeight:number;letterSpacing:number;rotation:number;maxLines:number;maxLength:number }
 export interface ScenePhoto { photo:Photo;stopId:string;x:number;y:number;width:number;height:number;rotation:number;borderRadius:number;frame:string;padding:number;bottom:number;fit:'contain'|'cover';cropX:number;cropY:number;tape:string;zIndex:number;overflow?:number }
 export interface SceneSticker { id:string;stickerId:string;x:number;y:number;width:number;height:number;rotation:number;zIndex:number;locked:boolean }
 export interface SceneShape { kind:'rect'|'line'|'circle'|'text';x:number;y:number;width:number;height:number;color:string;rotation?:number;dashed?:boolean;text?:string;fontSize?:number }
@@ -42,8 +42,8 @@ export function capacityIssue(story:DayItinerary|undefined){
 export function validateJournalScene(scene:JournalScene):string[]{
  const issues:string[]=[];
  const box=(a:{x:number;y:number;width:number;height:number},b:{x:number;y:number;width:number;height:number})=>a.x<b.x+b.width&&a.x+a.width>b.x&&a.y<b.y+b.height&&a.y+a.height>b.y;
- scene.texts.forEach((t,i)=>{const height=t.lineHeight*t.maxLines;if(t.x<70||t.y<70||t.x+t.width>1010.01||t.y+height>1350.01)issues.push('文字越界:'+t.id);
- if(t.text){for(const p of scene.photos)if(box({...t,height},p))issues.push('文字与照片重叠:'+t.id);for(const o of scene.texts.slice(i+1))if(o.text&&box({...t,height},{...o,height:o.lineHeight*o.maxLines}))issues.push('文字重叠:'+t.id);}});
+ scene.texts.forEach((t,i)=>{if(t.x<0||t.y<0||t.x+t.width>1080.01||t.y+t.height>1440.01)issues.push('文字越界:'+t.id);
+ if(t.text){for(const p of scene.photos)if(box(t,p))issues.push('文字与照片重叠:'+t.id);for(const o of scene.texts.slice(i+1))if(o.text&&box(t,o))issues.push('文字重叠:'+t.id);}});
  return issues;
 }
 
@@ -88,7 +88,7 @@ export function buildJournalScene(template:JournalTemplate,photos:Photo[],conten
  const urban=template.id==='urban_grunge',soft=template.id==='soft_scrapbook';
  const ink=urban?'#292622':soft?'#315760':'#45553c';
  const scene:JournalScene={background:template.background,paperUrl:'/journal-paper/'+(urban?'urban':soft?'soft':'route')+'.png',grid:false,photos:[],texts:[],stickers:[],decorations:[],nodes:[],stopBlocks:[],style:template.id};
- const text=(id:string,label:string,value:string,x:number,y:number,w:number,size:number,lines:number,room:number)=>{
+ const text=(id:string,label:string,value:string,x:number,y:number,w:number,size:number,_lines:number,_room:number)=>{
  const o=overrides[id]??{},move=edits.texts[id]??{};
   const role=id.includes(':')?id.split(':')[1]:id;
   const normalizedValue=role==='caption'||role==='intro'||role==='closing'?normalizeJournalBodyText(value):value;
@@ -96,13 +96,18 @@ export function buildJournalScene(template:JournalTemplate,photos:Photo[],conten
   const fontSize=clamp(o.fontSize??size*scaleByRole,14,80);
   const lineFactor=soft?(role==='caption'||role==='intro'||role==='closing'?1.48:1.3):urban?(role==='caption'?1.34:1.2):(role==='caption'||role==='intro'||role==='closing'?1.42:1.24);
   const lineHeight=fontSize*lineFactor;
-  const maxLines=Math.max(1,Math.min(lines,Math.floor(room/lineHeight)));
-  const width=clamp(move.width??w,100,940);
   const fontFamily=urban?(role==='title'?'Impact, "Arial Black", "Microsoft YaHei", sans-serif':role==='date'||role==='time'?'"Courier New", "Songti SC", monospace':role==='place'?'"Arial Black", "Kaiti SC", sans-serif':'Georgia, "Songti SC", SimSun, serif'):soft?'"Kaiti SC", STKaiti, "Microsoft YaHei", sans-serif':'STKaiti, "Kaiti SC", KaiTi, "Songti SC", serif';
   const fontWeight=o.fontWeight??(role==='title'?(urban?800:600):role==='place'?(urban?700:600):urban&&(role==='date'||role==='time')?600:400);
   const letterSpacing=urban?(role==='title'?3.5:role==='date'||role==='time'?1.8:role==='place'?1.2:.35):soft?(role==='title'?1.6:role==='place'?1.1:.75):(role==='title'?2.2:role==='place'?1.3:.65);
   const rotation=urban?(role==='title'?-0.45:role==='caption'?(id.length%2?0.18:-0.18):0):soft?(role==='intro'?-0.22:role==='closing'?0.2:role==='caption'?(id.length%2?0.16:-0.16):0):(role==='intro'?-0.3:role==='closing'?0.28:role==='place'?(id.length%2?0.22:-0.22):0);
-  scene.texts.push({id,label,text:normalizedValue||'',x:clamp(move.x??x,70,1010-width),y:clamp(move.y??y,70,1350-maxLines*lineHeight),width,fontSize,fontFamily,fontWeight,color:urban?(role==='date'||role==='time'?'#66594b':role==='title'?'#201f1c':'#39332c'):soft?(role==='date'||role==='time'?'#78918d':role==='title'?'#42645b':'#50665f'):role==='date'||role==='time'?'#9a6f4c':role==='title'?'#3f563b':ink,align:o.align??'left',lineHeight,letterSpacing,rotation,maxLines,maxLength:role==='title'?50:120});
+  const minWidth=role==='caption'||role==='intro'||role==='closing'?120:100;
+  const requestedX=move.x??x,xPosition=clamp(requestedX,0,1080-minWidth);
+  const width=clamp(move.width??w,minWidth,1080-xPosition);
+  const measured=measureTextBlock(normalizedValue||'',width,fontFamily,fontSize,fontWeight,lineHeight,letterSpacing);
+  const height=measured.height,yPosition=clamp(move.y??y,0,Math.max(0,1440-height));
+  const element:SceneText={id,label,text:normalizedValue||'',x:xPosition,y:yPosition,width,height,fontSize,fontFamily,fontWeight,color:urban?(role==='date'||role==='time'?'#66594b':role==='title'?'#201f1c':'#39332c'):soft?(role==='date'||role==='time'?'#78918d':role==='title'?'#42645b':'#50665f'):role==='date'||role==='time'?'#9a6f4c':role==='title'?'#3f563b':ink,align:o.align??'left',lineHeight,letterSpacing,rotation,maxLines:measured.lines.length,maxLength:role==='title'?50:120};
+  scene.texts.push(element);
+  return element;
  };
  const title=story?.title?.trim();
  text('title','标题',title&& !['一天的旅行','这一天的旅行'].includes(title)?title:story?.city?story.city+'旅行日记':'今天的旅行',80,76,850,urban?64:58,2,148);
@@ -113,15 +118,15 @@ export function buildJournalScene(template:JournalTemplate,photos:Photo[],conten
  const stops=story?.stops??[];
  scene.stopBlocks=layoutStopBlocks(stops,template.id);
  stops.forEach((stop,index)=>{
-  const block=scene.stopBlocks[index],dense=stops.length>4;
+  const block=scene.stopBlocks[index];
   scene.nodes.push({stopId:stop.id,x:block.nodeX,y:block.nodeY});
   const headerY=block.y+8,placeSize=stops.length>6?18:stops.length>4?21:27;
   text(stop.id+':time','时间',stop.startTime,block.textX,headerY,block.textWidth,stops.length>6?14:17,1,22);
   text(stop.id+':place','地点',stop.placeName,block.textX,headerY+(stops.length>6?22:27),block.textWidth,placeSize,stops.length>4?1:2,stops.length>4?28:62);
   const captionY=headerY+(stops.length>6?48:stops.length>4?58:82);
   const captionRoom=Math.max(24,block.y+block.height-captionY-6);
-  text(stop.id+':caption','配文',stop.caption,block.textX,captionY,block.textWidth,stops.length>6?15:stops.length>4?17:19,stops.length>6?2:stops.length>4?3:5,captionRoom);
-  if(stop.caption?.trim())scene.decorations.push({kind:'rect',x:block.textX-7,y:captionY-5,width:block.textWidth+14,height:Math.min(captionRoom+6,dense?58:96),color:urban?'#e5dac3':soft?'#f9f3df':'#f8eed5',rotation:0});
+  const captionText=text(stop.id+':caption','配文',stop.caption,block.textX,captionY,block.textWidth,stops.length>6?15:stops.length>4?17:19,stops.length>6?2:stops.length>4?3:5,captionRoom);
+  if(stop.caption?.trim())scene.decorations.push({kind:'rect',x:block.textX-7,y:captionText.y-5,width:block.textWidth+14,height:captionText.height+10,color:urban?'#e5dac3':soft?'#f9f3df':'#f8eed5',rotation:0});
 
   const allItems=stop.representativePhotoIds.map(id=>photos.find(photo=>photo.id===id));
   if(allItems.some(photo=>!photo))throw new Error('缺少行程照片');
@@ -142,7 +147,7 @@ export function buildJournalScene(template:JournalTemplate,photos:Photo[],conten
   soft_scrapbook:[[118,246],[32,1138],[940,610],[18,890],[862,116],[780,1300],[30,1260],[932,330],[874,1050],[470,1230],[955,760],[160,1320],[835,245],[30,360]],
   urban_grunge:[[16,1118],[780,1182],[870,146],[28,760],[940,1020],[906,300],[180,246],[18,520],[850,1310],[442,1170],[900,620],[20,1300],[932,900],[420,1280]],
  };
- const contentBoxes=[...scene.photos.map(photo=>({x:photo.x,y:photo.y,width:photo.width,height:photo.height})),...scene.texts.filter(item=>item.text.trim()).map(item=>({x:item.x,y:item.y,width:item.width,height:item.lineHeight*item.maxLines}))];
+ const contentBoxes=[...scene.photos.map(photo=>({x:photo.x,y:photo.y,width:photo.width,height:photo.height})),...scene.texts.filter(item=>item.text.trim()).map(item=>({x:item.x,y:item.y,width:item.width,height:item.height}))];
  const obscuresContent=(item:{x:number;y:number;width:number;height:number})=>contentBoxes.some(box=>{const width=Math.max(0,Math.min(item.x+item.width,box.x+box.width)-Math.max(item.x,box.x)),height=Math.max(0,Math.min(item.y+item.height,box.y+box.height)-Math.max(item.y,box.y));return width*height>item.width*item.height*.18;});
  const initialPlacement=(x:number,y:number,width:number,height:number,rotation:number,locked:boolean)=>{
   const offsets:[[number,number],...Array<[number,number]>]=[[0,0],[0,-72],[0,72],[-76,0],[76,0],[-70,-62],[70,62]];

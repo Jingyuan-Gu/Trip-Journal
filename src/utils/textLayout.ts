@@ -24,7 +24,7 @@ function avoidSingleCharacterLines(lines:string[],measure:(text:string)=>number,
 }
 
 /** Preserve intentional paragraphs; keep Latin words together and measure Chinese by rendered width. */
-export function wrapText(measure: (text:string)=>number, text:string, width:number, maxLines:number):string[] {
+export function wrapText(measure: (text:string)=>number, text:string, width:number, maxLines=Number.POSITIVE_INFINITY):string[] {
   const lines:string[]=[];
   for(const paragraph of text.replace(/\r\n?/g,'\n').split('\n')) {
     let line=''; const tokens=paragraph.match(/[\p{Script=Latin}\p{N}]+(?:['’-][\p{Script=Latin}\p{N}]+)*|[^\S\n]+|[^\p{Script=Latin}\p{N}]/gu)??[];
@@ -36,6 +36,15 @@ export function wrapText(measure: (text:string)=>number, text:string, width:numb
     lines.push(line.trimEnd());
   }
   const balanced=avoidSingleCharacterLines(lines,measure,width);
-  if(balanced.length>maxLines){balanced.length=maxLines;let last=Array.from(balanced[maxLines-1]??'');while(last.length&&measure(last.join('')+'…')>width)last.pop();balanced[maxLines-1]=last.join('')+'…';}
+  if(Number.isFinite(maxLines)&&balanced.length>maxLines){balanced.length=maxLines;let last=Array.from(balanced[maxLines-1]??'');while(last.length&&measure(last.join('')+'…')>width)last.pop();balanced[maxLines-1]=last.join('')+'…';}
   return balanced;
+}
+
+let measurementContext:CanvasRenderingContext2D|null|undefined;
+export function measureTextBlock(text:string,width:number,fontFamily:string,fontSize:number,fontWeight:number|string,lineHeight:number,letterSpacing:number){
+  if(measurementContext===undefined&&typeof document!=='undefined')measurementContext=document.createElement('canvas').getContext('2d');
+  const context=measurementContext;
+  const measure=context?((value:string)=>{context.font=`${fontWeight} ${fontSize}px ${fontFamily}`;(context as CanvasRenderingContext2D&{letterSpacing?:string}).letterSpacing=`${letterSpacing}px`;return context.measureText(value).width;}):((value:string)=>Array.from(value).length*fontSize*.92);
+  const lines=wrapText(measure,text,width);
+  return {lines,height:Math.max(lineHeight,lines.length*lineHeight)};
 }
