@@ -23,6 +23,10 @@ export default function ItineraryPage() {
   const date = state.selectedDate;
   const photos = state.photos.filter(p=>p.date===date);
   const day = date ? state.dayItineraries[date] : undefined;
+  useEffect(()=>{
+    if(!date||!day?.stops.some(stop=>stop.representativePhotoIds.length>3))return;
+    setState(current=>{const itinerary=current.dayItineraries[date];if(!itinerary)return current;return {...current,dayItineraries:{...current.dayItineraries,[date]:{...itinerary,stops:itinerary.stops.map(stop=>stop.representativePhotoIds.length>3?{...stop,representativePhotoIds:stop.representativePhotoIds.slice(0,3)}:stop)}}};});
+  },[date,day,setState]);
   if (!date || !photos.length) return <PageFrame title="先选择一天" description="上传照片后，再还原这一天的故事。" back="/dates" placeholder={false}><Link to="/upload" className="primary-button empty-state-action">返回上传照片</Link></PageFrame>;
   const updateStop = (id:string,patch:Partial<TripStop>) => setState(p=>{
     const current=p.dayItineraries[date];if(!current)return p;
