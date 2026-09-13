@@ -1,4 +1,29 @@
-/** Preserve paragraphs; keep Latin words together, break oversized tokens by Unicode character. */
+export function normalizeJournalBodyText(value:string):string {
+  return String(value||'')
+    .replace(/\r\n?/g,'\n')
+    .replace(/\n+/g,' ')
+    .replace(/[\t\f\v ]+/g,' ')
+    .replace(/([\p{Script=Han}，。！？；：、“”‘’])\s+(?=[\p{Script=Han}，。！？；：、“”‘’])/gu,'$1')
+    .replace(/\s+([，。！？；：])/g,'$1')
+    .trim();
+}
+
+function avoidSingleCharacterLines(lines:string[],measure:(text:string)=>number,width:number){
+  for(let index=0;index<lines.length;index+=1){
+    const chars=Array.from(lines[index].trim());
+    if(chars.length!==1||!/[\p{Script=Han}]/u.test(chars[0]))continue;
+    const next=lines[index+1];
+    if(next){
+      const nextChars=Array.from(next);
+      if(nextChars.length>1&&measure(chars[0]+nextChars[0])<=width){lines[index]=chars[0]+nextChars.shift();lines[index+1]=nextChars.join('');continue;}
+    }
+    const previous=lines[index-1];
+    if(previous){const previousChars=Array.from(previous);if(previousChars.length>1){lines[index]=previousChars.pop()+chars[0];lines[index-1]=previousChars.join('');}}
+  }
+  return lines.filter(Boolean);
+}
+
+/** Preserve intentional paragraphs; keep Latin words together and measure Chinese by rendered width. */
 export function wrapText(measure: (text:string)=>number, text:string, width:number, maxLines:number):string[] {
   const lines:string[]=[];
   for(const paragraph of text.replace(/\r\n?/g,'\n').split('\n')) {
@@ -10,6 +35,7 @@ export function wrapText(measure: (text:string)=>number, text:string, width:numb
     }
     lines.push(line.trimEnd());
   }
-  if(lines.length>maxLines){lines.length=maxLines;let last=Array.from(lines[maxLines-1]??'');while(last.length&&measure(last.join('')+'…')>width)last.pop();lines[maxLines-1]=last.join('')+'…';}
-  return lines;
+  const balanced=avoidSingleCharacterLines(lines,measure,width);
+  if(balanced.length>maxLines){balanced.length=maxLines;let last=Array.from(balanced[maxLines-1]??'');while(last.length&&measure(last.join('')+'…')>width)last.pop();balanced[maxLines-1]=last.join('')+'…';}
+  return balanced;
 }

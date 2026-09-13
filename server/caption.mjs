@@ -7,8 +7,18 @@ function captionLength(value) {
   return (value.match(/[\u3400-\u9fff]/g) || []).length;
 }
 
+export function normalizeCaptionText(value) {
+  return String(value || '')
+    .replace(/\r\n?/g, '\n')
+    .replace(/\n+/g, ' ')
+    .replace(/[\t\f\v ]+/g, ' ')
+    .replace(/([\u3400-\u9fff，。！？；：、“”‘’])\s+(?=[\u3400-\u9fff，。！？；：、“”‘’])/g, '$1')
+    .replace(/\s+([，。！？；：])/g, '$1')
+    .trim();
+}
+
 export function isCompleteCaption(value) {
-  const text = typeof value === 'string' ? value.trim() : '';
+  const text = normalizeCaptionText(value);
   if (!text || captionLength(text) < 8) return false;
   if (/[，、：；（(“"'、]$/.test(text)) return false;
   const semanticEnding = text.replace(/[。！？…!?；;”’"']+$/g, '').trim();
@@ -124,7 +134,7 @@ export async function caption(input) {
   const first = await requestAgnes(url, apiKey, body, 'generate');
   const parsed = parseAssistantPayload(first.assistantText);
   const firstResult = parsed.result;
-  const firstCaption = typeof firstResult?.caption === 'string' ? firstResult.caption.trim() : '';
+  const firstCaption = typeof firstResult?.caption === 'string' ? normalizeCaptionText(firstResult.caption) : '';
   const firstLength = captionLength(firstCaption);
   const needsRepair = first.finishReason === 'length'
     || parsed.invalidJson
@@ -149,8 +159,8 @@ export async function caption(input) {
       const repair = await requestAgnes(url, apiKey, repairBody, 'repair');
       const repairParsed = parseAssistantPayload(repair.assistantText);
       const repaired = typeof repairParsed.result?.caption === 'string'
-        ? repairParsed.result.caption.trim()
-        : repair.assistantText.trim();
+      ? normalizeCaptionText(repairParsed.result.caption)
+      : normalizeCaptionText(repair.assistantText);
       if (repair.finishReason !== 'length' && isCompleteCaption(repaired)) finalCaption = repaired;
       else {
         finalCaption = firstCompleteSentence(repaired)
@@ -166,6 +176,7 @@ export async function caption(input) {
   if (!isCompleteCaption(finalCaption)) {
     finalCaption = firstCompleteSentence(finalCaption) || safeFallback(input.placeName);
   }
+  finalCaption = normalizeCaptionText(finalCaption);
 
   return {
     caption: finalCaption,
