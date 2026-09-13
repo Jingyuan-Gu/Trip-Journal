@@ -35,7 +35,9 @@ export async function renderJournal({photos,template,content,overrides={},story,
    ctx.save();ctx.beginPath();ctx.rect(x,y,iw,ih);ctx.clip();
    const g=imageGeometry(image.naturalWidth,image.naturalHeight,iw,ih,p.fit,p.cropX,p.cropY);
    ctx.drawImage(image,x+g.x,y+g.y,g.width,g.height);ctx.restore();
-   ctx.drawImage(await loadImage(svgUrl(tapeArtwork(p))),-w/2,-h/2,w,h);ctx.restore();
+   ctx.drawImage(await loadImage(svgUrl(tapeArtwork(p))),-w/2,-h/2,w,h);
+   if(p.overflow){const label=`+${p.overflow}`,badgeWidth=48,badgeHeight=34,badgeX=w/2-badgeWidth-12,badgeY=h/2-badgeHeight-12;ctx.fillStyle='#2f332de0';ctx.beginPath();ctx.roundRect(badgeX,badgeY,badgeWidth,badgeHeight,17);ctx.fill();ctx.fillStyle='#fffaf0';ctx.font='700 17px system-ui, sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(label,badgeX+badgeWidth/2,badgeY+badgeHeight/2);}
+   ctx.restore();
   }finally{URL.revokeObjectURL(url);}
  }
  for(const s of scene.stickers.filter(s=>s.zIndex>=40).sort((a,b)=>a.zIndex-b.zIndex))await drawSticker(s);

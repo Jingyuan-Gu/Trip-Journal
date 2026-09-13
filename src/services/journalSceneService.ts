@@ -8,11 +8,12 @@ import { emptySceneEdits } from '../types/scene';
 import { STICKER_LIBRARY, stickerSize } from '../assets/journal/stickers';
 
 export interface SceneText { id:string;label:string;text:string;x:number;y:number;width:number;fontSize:number;fontFamily:string;fontWeight:number|string;color:string;align:'left'|'center'|'right';lineHeight:number;letterSpacing:number;rotation:number;maxLines:number;maxLength:number }
-export interface ScenePhoto { photo:Photo;stopId:string;x:number;y:number;width:number;height:number;rotation:number;borderRadius:number;frame:string;padding:number;bottom:number;fit:'contain'|'cover';cropX:number;cropY:number;tape:string;zIndex:number }
+export interface ScenePhoto { photo:Photo;stopId:string;x:number;y:number;width:number;height:number;rotation:number;borderRadius:number;frame:string;padding:number;bottom:number;fit:'contain'|'cover';cropX:number;cropY:number;tape:string;zIndex:number;overflow?:number }
 export interface SceneSticker { id:string;stickerId:string;x:number;y:number;width:number;height:number;rotation:number;zIndex:number;locked:boolean }
 export interface SceneShape { kind:'rect'|'line'|'circle'|'text';x:number;y:number;width:number;height:number;color:string;rotation?:number;dashed?:boolean;text?:string;fontSize?:number }
 export interface RouteNode { stopId:string;x:number;y:number }
-export interface JournalScene { background:string;paperUrl:string;grid:boolean;photos:ScenePhoto[];texts:SceneText[];stickers:SceneSticker[];decorations:SceneShape[];nodes:RouteNode[];style:JournalTemplate['id'] }
+export interface StopLayoutBlock { stopId:string;x:number;y:number;width:number;height:number;nodeX:number;nodeY:number;photoRects:Array<{x:number;y:number;width:number;height:number}>;textX:number;textWidth:number }
+export interface JournalScene { background:string;paperUrl:string;grid:boolean;photos:ScenePhoto[];texts:SceneText[];stickers:SceneSticker[];decorations:SceneShape[];nodes:RouteNode[];stopBlocks:StopLayoutBlock[];style:JournalTemplate['id'] }
 export const clamp=(n:number,min:number,max:number)=>Math.max(min,Math.min(max,n));
 export function ensureDecorationInsideCanvas(element:{x:number;y:number;width:number;height:number;rotation:number},margin=12){
  const radians=Math.abs(element.rotation)*Math.PI/180,cos=Math.abs(Math.cos(radians)),sin=Math.abs(Math.sin(radians));
@@ -33,7 +34,6 @@ export function storyPhotos(story:DayItinerary|undefined,photos:Photo[],fallback
 export function capacityIssue(story:DayItinerary|undefined){
  if(!story?.stops.length)return '请先整理今日行程。';
  if(story.stops.length>8)return '一页可清晰展示最多 8 站，请返回今日行程调整；当前行程不会被截断。';
- if(story.stops.some(s=>s.representativePhotoIds.length>4))return '每站最多展示 4 张代表照片，请返回今日行程调整。';
  const ids=story.stops.flatMap(s=>s.representativePhotoIds);
  if(new Set(ids).size!==ids.length)return '有照片被分配到了多个站点，请先确认照片归属。';
  return '';
@@ -45,10 +45,48 @@ export function validateJournalScene(scene:JournalScene):string[]{
  if(t.text){for(const p of scene.photos)if(box({...t,height},p))issues.push('文字与照片重叠:'+t.id);for(const o of scene.texts.slice(i+1))if(o.text&&box({...t,height},{...o,height:o.lineHeight*o.maxLines}))issues.push('文字重叠:'+t.id);}});
  return issues;
 }
+
+function photoRectsInside(x:number,y:number,width:number,height:number,count:number,heroOnLeft:boolean){
+ if(count<=0)return [];
+ if(count===1)return [{x,y,width,height}];
+ const gap=10,heroWidth=Math.round(width*.64),detailWidth=width-heroWidth-gap;
+ const heroX=heroOnLeft?x:x+detailWidth+gap,detailX=heroOnLeft?x+heroWidth+gap:x;
+ if(count===2)return [{x:heroX,y,width:heroWidth,height},{x:detailX,y:y+height*.18,width:detailWidth,height:height*.64}];
+ const detailHeight=(height-gap)/2;
+ return [{x:heroX,y,width:heroWidth,height},{x:detailX,y,width:detailWidth,height:detailHeight},{x:detailX,y:y+detailHeight+gap,width:detailWidth,height:detailHeight}];
+}
+
+function layoutStopBlocks(stops:DayItinerary['stops'],style:JournalTemplate['id']):StopLayoutBlock[]{
+ const count=stops.length;if(!count)return [];
+ const top=320,bottom=1260,gap=count<=4?22:count<=6?14:10,usable=bottom-top-gap*(count-1);
+ const visibleLimit=count>=7?1:count>=5?2:3;
+ const desired=stops.map(stop=>{
+  const visible=Math.min(visibleLimit,stop.representativePhotoIds.length);
+  const captionLines=stop.caption?.trim()?Math.min(count<=4?3:2,Math.max(1,Math.ceil(stop.caption.trim().length/(count<=4?16:22)))):0;
+  const base=count<=3?238:count===4?202:count<=6?138:104;
+  return base+Math.max(0,visible-1)*8+Math.max(0,captionLines-1)*12;
+ });
+ const total=desired.reduce((sum,value)=>sum+value,0),scale=Math.min(1,usable/Math.max(1,total));
+ let cursor=top;
+ return stops.map((stop,index)=>{
+  const height=desired[index]*scale,left=index%2===0;
+  const width=style==='route_journal'?448:style==='soft_scrapbook'?850:870;
+  const x=style==='route_journal'?(left?70:562):style==='soft_scrapbook'?(left?92:138):(left?72:130);
+  const nodeX=style==='route_journal'?540:style==='soft_scrapbook'?56:1022,nodeY=cursor+height/2;
+  const photoWidth=width*(style==='urban_grunge' ? 0.6 : 0.57),textGap=18,textWidth=width-photoWidth-textGap;
+  const heroOnLeft=style!=='route_journal'||left;
+  const photoX=heroOnLeft?x:x+textWidth+textGap,textX=heroOnLeft?x+photoWidth+textGap:x;
+  const photoY=cursor+6,photoHeight=Math.max(82,height-12);
+  const visible=Math.min(visibleLimit,stop.representativePhotoIds.length,3);
+  const block={stopId:stop.id,x,y:cursor,width,height,nodeX,nodeY,photoRects:photoRectsInside(photoX,photoY,photoWidth,photoHeight,visible,heroOnLeft),textX,textWidth};
+  cursor+=height+gap;return block;
+ });
+}
+
 export function buildJournalScene(template:JournalTemplate,photos:Photo[],content:JournalContent,overrides:Record<string,TextStyleOverride>={},story?:DayItinerary,edits:SceneEdits=emptySceneEdits):JournalScene{
  const urban=template.id==='urban_grunge',soft=template.id==='soft_scrapbook';
  const ink=urban?'#292622':soft?'#315760':'#45553c';
- const scene:JournalScene={background:template.background,paperUrl:'/journal-paper/'+(urban?'urban':soft?'soft':'route')+'.png',grid:false,photos:[],texts:[],stickers:[],decorations:[],nodes:[],style:template.id};
+ const scene:JournalScene={background:template.background,paperUrl:'/journal-paper/'+(urban?'urban':soft?'soft':'route')+'.png',grid:false,photos:[],texts:[],stickers:[],decorations:[],nodes:[],stopBlocks:[],style:template.id};
  const text=(id:string,label:string,value:string,x:number,y:number,w:number,size:number,lines:number,room:number)=>{
   const o=overrides[id]??{},move=edits.texts[id]??{};
   const role=id.includes(':')?id.split(':')[1]:id;
@@ -71,40 +109,29 @@ export function buildJournalScene(template:JournalTemplate,photos:Photo[],conten
  text('intro','开场',story?.summary||'',80,268,920,22,1,28);
  scene.decorations.push({kind:'line',x:80,y:216,width:urban?920:560,height:0,color:urban?'#292622':'#97a680'});
  const stops=story?.stops??[];
- const row=934/Math.max(1,stops.length);
+ scene.stopBlocks=layoutStopBlocks(stops,template.id);
  stops.forEach((stop,index)=>{
-  const y=320+index*row,h=row-26;
-  const left=urban?index%3!==1:index%2===0;
-  const px=left?80:596,tx=left?620:80,pw=404,tw=380;
-  scene.nodes.push({stopId:stop.id,x:540+(soft?(index%2?10:-10):0),y:y+22});
-  const size=stops.length>5?21:27;
-  text(stop.id+':time','时间',stop.startTime,tx,y,tw,18,1,24);
-  text(stop.id+':place','地点',stop.placeName,tx,y+28,tw,size,stops.length>4?1:2,stops.length>4?30:68);
-  const cy=y+(stops.length>4?60:103);
-  const captionRoom=Math.max(25,h-(cy-y));
-  text(stop.id+':caption','配文',stop.caption,tx,cy,tw,stops.length>5?18:23,stops.length>5?1:3,captionRoom);
-  if(stop.caption?.trim())scene.decorations.push({kind:'rect',x:tx-8,y:cy-6,width:tw+16,height:Math.min(captionRoom+8,stops.length>5?34:100),color:urban?'#e5dac3':soft?'#f9f3df':'#f8eed5',rotation:0});
-  const allItems=stop.representativePhotoIds.map(id=>photos.find(p=>p.id===id));
-  const items=allItems.slice(0,3);
-  const overflow=Math.max(0,allItems.length-items.length);
-  if(items.some(p=>!p))throw new Error('缺少行程照片');
-  const count=items.length;
-  items.forEach((photo,i)=>{
+  const block=scene.stopBlocks[index],dense=stops.length>4;
+  scene.nodes.push({stopId:stop.id,x:block.nodeX,y:block.nodeY});
+  const headerY=block.y+8,placeSize=stops.length>6?18:stops.length>4?21:27;
+  text(stop.id+':time','时间',stop.startTime,block.textX,headerY,block.textWidth,stops.length>6?14:17,1,22);
+  text(stop.id+':place','地点',stop.placeName,block.textX,headerY+(stops.length>6?22:27),block.textWidth,placeSize,stops.length>4?1:2,stops.length>4?28:62);
+  const captionY=headerY+(stops.length>6?48:stops.length>4?58:82);
+  const captionRoom=Math.max(24,block.y+block.height-captionY-6);
+  text(stop.id+':caption','配文',stop.caption,block.textX,captionY,block.textWidth,stops.length>6?15:stops.length>4?17:21,stops.length>4?2:3,captionRoom);
+  if(stop.caption?.trim())scene.decorations.push({kind:'rect',x:block.textX-7,y:captionY-5,width:block.textWidth+14,height:Math.min(captionRoom+6,dense?58:96),color:urban?'#e5dac3':soft?'#f9f3df':'#f8eed5',rotation:0});
+
+  const allItems=stop.representativePhotoIds.map(id=>photos.find(photo=>photo.id===id));
+  if(allItems.some(photo=>!photo))throw new Error('缺少行程照片');
+  const items=allItems.slice(0,block.photoRects.length),overflow=Math.max(0,allItems.length-items.length);
+  items.forEach((photo,photoIndex)=>{
    if(!photo)return;
-   // Each actual photo gets its own region. No repeated or truncated slots.
-   const bigW=count===1?pw:count===2?pw*.60:pw*.64;
-   const smallW=pw-bigW-14;
-   const cell=i===0?{x:px,y,w:bigW,h}:count===2?{x:px+bigW+14,y:y+h*.18,w:smallW,h:h*.70}:{x:px+bigW+14,y:y+(i-1)*(h/(count-1)),w:smallW,h:h/(count-1)-10};
-   const pad=stops.length>5?5:9,bottom=urban?pad:i===0?pad*2.8:pad;
-   const ratio=Math.min((cell.w-2*pad)/Math.max(1,photo.width),(cell.h-pad-bottom)/Math.max(1,photo.height));
-   const w=Math.max(28,photo.width*ratio+pad*2),ph=Math.max(28,photo.height*ratio+pad+bottom),photoScale=count===1?1.14:1.1;
-   const edit=edits.photos[photo.id]??{};
-   const defaultWidth=clamp(w*photoScale,28,940),defaultHeight=clamp(ph*photoScale,28,1240);
-   const width=clamp(edit.width??defaultWidth,28,940),height=clamp(edit.height??defaultHeight,28,1240);
-   const rotation=clamp(edit.rotation??(urban?(i%2?1:-1):((index+i)%2?1.5:-1.5)),-15,15);
-   if(!edit.hidden)scene.photos.push({photo,stopId:stop.id,x:clamp(edit.x??cell.x+(cell.w-defaultWidth)/2,0,1080-width),y:clamp(edit.y??cell.y+(cell.h-defaultHeight)/2,0,1440-height),width,height,rotation,padding:pad,bottom,frame:urban?'#eae4d6':'#fcf8ed',borderRadius:urban?0:2,fit:edit.fit??'contain',cropX:clamp(edit.cropX??.5,0,1),cropY:clamp(edit.cropY??.5,0,1),tape:['#acb9a0','#a9c4c7','#c9ac7e','#d3ca99','#d0baad'][(index+i)%5],zIndex:40+index*3+i});
+   const cell=block.photoRects[photoIndex],pad=stops.length>6?4:urban?7:8,bottom=urban?pad:photoIndex===0?pad*2.2:pad;
+   const edit=edits.photos[photo.id]??{},defaultWidth=cell.width,defaultHeight=cell.height;
+   const width=clamp(edit.width??defaultWidth,72,940),height=clamp(edit.height??defaultHeight,72,1240);
+   const rotation=clamp(edit.rotation??(urban?(photoIndex%2?1.6:-1.2):soft?((index+photoIndex)%2?1.2:-1.2):((index+photoIndex)%2 ? 0.8 : -0.8)),-15,15);
+   if(!edit.hidden)scene.photos.push({photo,stopId:stop.id,x:clamp(edit.x??cell.x,0,1080-width),y:clamp(edit.y??cell.y,0,1440-height),width,height,rotation,padding:pad,bottom,frame:urban?'#eae4d6':'#fcf8ed',borderRadius:urban?0:2,fit:edit.fit??'cover',cropX:clamp(edit.cropX??.5,0,1),cropY:clamp(edit.cropY??.5,0,1),tape:['#acb9a0','#a9c4c7','#c9ac7e','#d3ca99','#d0baad'][(index+photoIndex)%5],zIndex:40+index*3+photoIndex,overflow:photoIndex===items.length-1?overflow:0});
   });
- if(overflow)scene.decorations.push({kind:'text',x:px+pw-72,y:y+h-34,width:60,height:26,color:urban?'#f5ecd9':soft?'#315249':'#59412e',text:`+${overflow}`,fontSize:20});
  });
  text('closing','结尾',story?.closingText||'',100,1290,840,24,2,60);
  const stickerIds=STICKER_LIBRARY[template.id];
@@ -120,7 +147,8 @@ export function buildJournalScene(template:JournalTemplate,photos:Photo[],conten
   for(const [dx,dy] of offsets){const placed=ensureDecorationInsideCanvas({x:x+dx,y:y+dy,width,height,rotation});if(placed&&(locked||!obscuresContent(placed)))return placed;}
   return null;
  };
- const stickerCount=template.id==='route_journal'?12:template.id==='soft_scrapbook'?14:12;
+ const baseStickerCount=template.id==='route_journal'?12:template.id==='soft_scrapbook'?14:12;
+ const stickerCount=Math.max(4,baseStickerCount-Math.max(0,stops.length-2)*2);
  for(let i=0;i<stickerCount;i++){const id=`sticker-${template.id}-${i}`,edit=(edits.stickers??{})[id]??{},locked=edit.locked??i<2;if(edit.hidden)continue;const libraryIndex=i<2?i:2+((i-2+stops.length)%(stickerIds.length-2)),stickerId=edit.stickerId??stickerIds[libraryIndex],size=stickerSize(stickerId),anchor=stickerAnchors[template.id][i%stickerAnchors[template.id].length],width=clamp(edit.width??size.width,24,360),height=clamp(edit.height??size.height,24,260),rotation=edit.rotation??((i%5)-2)*2;const placed=edit.x!==undefined||edit.y!==undefined?ensureDecorationInsideCanvas({x:edit.x??anchor[0],y:edit.y??anchor[1],width,height,rotation}):initialPlacement(anchor[0],anchor[1],width,height,rotation,locked);if(!placed)continue;scene.stickers.push({id,stickerId,...placed,zIndex:edit.zIndex??(locked?2:55+i%8),locked});}
  for(const [id,edit] of Object.entries(edits.stickers??{})){if(id.startsWith('sticker-')||edit.hidden||!edit.stickerId)continue;const placed=ensureDecorationInsideCanvas({x:edit.x??120,y:edit.y??120,width:clamp(edit.width??64,24,300),height:clamp(edit.height??64,24,300),rotation:edit.rotation??0});if(placed)scene.stickers.push({id,stickerId:edit.stickerId,...placed,zIndex:edit.zIndex??60,locked:edit.locked??false});}
  return scene;
