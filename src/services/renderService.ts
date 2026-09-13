@@ -40,10 +40,11 @@ export async function renderJournal({photos,template,content,overrides={},story,
  }
  for(const s of scene.stickers.filter(s=>s.zIndex>=40).sort((a,b)=>a.zIndex-b.zIndex))await drawSticker(s);
  for(const t of scene.texts){
-  if(!t.text)continue;ctx.save();ctx.font=t.fontWeight+' '+t.fontSize+'px '+t.fontFamily;ctx.fillStyle=t.color;ctx.textAlign=t.align;ctx.textBaseline='top';
+  if(!t.text)continue;ctx.save();const textHeight=t.lineHeight*t.maxLines;ctx.translate(t.x+t.width/2,t.y+textHeight/2);ctx.rotate(t.rotation*Math.PI/180);ctx.font=t.fontWeight+' '+t.fontSize+'px '+t.fontFamily;ctx.fillStyle=t.color;ctx.textAlign=t.align;ctx.textBaseline='top';
+  (ctx as CanvasRenderingContext2D&{letterSpacing?:string}).letterSpacing=t.letterSpacing+'px';
   const lines=wrapText(s=>ctx.measureText(s).width,t.text,t.width,t.maxLines);
-  const x=t.x+(t.align==='center'?t.width/2:t.align==='right'?t.width:0);
-  lines.forEach((line,i)=>ctx.fillText(line,x,t.y+i*t.lineHeight+(t.lineHeight-t.fontSize)/2));ctx.restore();
+  const x=-t.width/2+(t.align==='center'?t.width/2:t.align==='right'?t.width:0),y=-textHeight/2;
+  lines.forEach((line,i)=>ctx.fillText(line,x,y+i*t.lineHeight+(t.lineHeight-t.fontSize)/2));ctx.restore();
  }
  return await new Promise<Blob>((resolve,reject)=>canvas.toBlob(b=>b?resolve(b):reject(new Error('PNG generation failed')),'image/png'));
  }finally{canvas.width=canvas.height=1;}

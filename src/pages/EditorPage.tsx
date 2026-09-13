@@ -18,7 +18,7 @@ export default function EditorPage() {
   if(!state.selectedDate||!photos.length||!!issue)return <PageFrame title="还没有生成手账" description={issue||'先完成今日行程，再记录今天。'} back="/template" placeholder={false}><Link to="/itinerary" className="primary-button empty-state-action">返回今日行程</Link></PageFrame>;
   const template=getTemplateById(state.selectedTemplateId);
   const scene=buildJournalScene(template,photos,state.journalContent,state.textStyleOverrides,story,edits);
-  const active=scene.texts.find(t=>t.id===selected&&!['city','intro','closing'].includes(t.id));
+  const active=scene.texts.find(t=>t.id===selected&&t.id!=='city');
   const updateStyle=(patch:{fontSize?:number;align?:'left'|'center'|'right'})=>setState(p=>({...p,textStyleOverrides:{...p.textStyleOverrides,[selected]:{...p.textStyleOverrides[selected],...patch}}}));
   const exportPng=async()=>{if(exporting)return;setExporting(true);setError('');try{const blob=await renderJournal({photos,template,content:state.journalContent,overrides:state.textStyleOverrides,story,edits});const name=((story?.title||state.journalContent.title).trim()||'TripJournal').replace(/[\\/:*?"<>|]/g,'').replace(/[. ]+$/,'')||'TripJournal';downloadBlob(blob,`${name}-${state.selectedDate}.png`);}catch{setError('高清图片生成失败，请重新尝试。');}finally{setExporting(false);}};
   return <PageFrame title="编辑你的旅行手账" description="点击文字直接修改，拖动照片调整版式，完成后即可导出高清图片。" back="/template" placeholder={false} className="editor-workbench-page">
